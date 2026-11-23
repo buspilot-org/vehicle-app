@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Location tracking (lib/src/tracking). -->
+    <!-- Location tracking (lib/src/tracking). The Traccar Client SDK declares
+         its own permissions too (incl. ACTIVITY_RECOGNITION, ACCESS_NETWORK_STATE);
+         they are merged in. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -11,8 +13,11 @@
     <!-- Also used by lib/src/device (BootReceiver). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Stop detection (Traccar Client SDK); declared here as well so
+         permission_handler can request it. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <application
-        android:label="buspilot_vehicle"
+        android:label="Buspilot"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -37,8 +42,12 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Foreground service that keeps location tracking running with the
-             screen off (flutter_foreground_task). Do not rename. -->
+        <!-- Our background service (flutter_foreground_task): tag scanning,
+             device health and vehicle events, next to the Traccar Client SDK's
+             own TrackerService (merged from the SDK's manifest). Both post the
+             same notification ID, so only one notification shows. Type
+             "location": beacon scans need location access in the background.
+             Do not rename. -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="location"

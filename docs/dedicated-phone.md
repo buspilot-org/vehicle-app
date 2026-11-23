@@ -65,11 +65,24 @@ Without device owner the app still works, with two limits:
 
 ## 4. Start on boot
 
-The app listens for `BOOT_COMPLETED` (and for app updates) and opens itself.
-This needs:
+After a reboot (and after an app update), tracking comes back by itself if it
+was on before:
 
-- device owner (section 2); Android 10 and later block the start otherwise,
-- no screen lock (section 1).
+- positions: the Traccar Client SDK restarts its tracker,
+- tags, device health and vehicle events: the app's background service
+  restarts (flutter_foreground_task, "auto run on boot").
+
+Neither needs device owner, but both need **no screen lock** (section 1):
+Android only starts apps after the phone has been unlocked once since boot.
+
+Exception: the first update to the version with the Traccar Client SDK needs
+the permission "Physical activity", which only the app's permission screen
+can ask for. Open the app once after that update and finish the permission
+screen; until then no positions are sent.
+
+Opening the app's screen after a reboot is a separate step: the app listens
+for `BOOT_COMPLETED` and opens itself, which Android 10 and later only allow
+for device owner apps (section 2).
 
 ## 5. Battery care
 
@@ -122,9 +135,11 @@ The app warns when the battery is at or above 45 °C (configurable in
 ## 6. Disable battery optimisation for the app
 
 Android and some vendors stop apps in the background to save power, which
-would stop location tracking. Exempt the app:
+would stop location tracking. The app's permission screen asks for this (and
+the Traccar Client SDK would otherwise open the list once when tracking
+starts). Exempt the app:
 
-- Settings → Apps → Buspilot vehicle → Battery → **Unrestricted** (or "Don't
+- Settings → Apps → Buspilot → Battery → **Unrestricted** (or "Don't
   optimise"), or
 - the **Battery optimisation settings** button on the Device status screen
   (outside kiosk mode).

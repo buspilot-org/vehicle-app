@@ -1,4 +1,4 @@
-package org.buspilot.buspilot_vehicle.device
+package org.buspilot.buspilot_battery
 
 import android.content.Context
 import android.content.Intent

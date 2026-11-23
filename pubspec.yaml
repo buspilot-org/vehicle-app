@@ -34,16 +34,17 @@ dependencies:
   permission_handler: ^13.0.2
   buspilot_ble_scanner:
     path: packages/buspilot_ble_scanner
+  buspilot_battery:
+    path: packages/buspilot_battery
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   flutter_foreground_task: ^11.0.3
-  geolocator: ^14.1.2
   shared_preferences: ^2.5.6
   http: ^1.6.0
   path_provider: ^2.1.6
-  battery_plus: ^7.1.2
+  traccar_client_sdk: ^1.1.4
 
 dev_dependencies:
   flutter_test:
@@ -55,6 +56,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  shared_preferences_platform_interface: ^2.4.2
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

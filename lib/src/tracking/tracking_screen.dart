@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -7,9 +9,11 @@ import '../device/device_status_screen.dart';
 import 'permission_screen.dart';
 import 'tracking_controller.dart';
 import 'tracking_permissions.dart';
-import 'tracking_status.dart';
+import 'companion_status.dart';
 
-/// Main screen: tracking state, last sent position and queue length.
+/// Main screen: tracking on/off, the background service (tags, health,
+/// events) and the Traccar Client SDK's log (the SDK reports no positions to
+/// the app, so its log is the only window into it).
 class TrackingScreen extends StatefulWidget {
   const TrackingScreen({
     super.key,
@@ -28,6 +32,7 @@ class _TrackingScreenState extends State<TrackingScreen>
     with WidgetsBindingObserver {
   PermissionState? _permissions;
   bool _permissionScreenOpen = false;
+  Timer? _logTimer;
 
   TrackingController get _c => widget.controller;
 
@@ -36,17 +41,35 @@ class _TrackingScreenState extends State<TrackingScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startup();
+    _startLogTimer();
   }
 
   @override
   void dispose() {
+    _logTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _checkPermissions();
+    if (state == AppLifecycleState.resumed) {
+      _checkPermissions();
+      _c.refreshLogs();
+      _startLogTimer();
+    } else if (state == AppLifecycleState.paused) {
+      _logTimer?.cancel();
+      _logTimer = null;
+    }
+  }
+
+  /// The SDK has no callbacks; poll its log while the screen is visible.
+  void _startLogTimer() {
+    _logTimer?.cancel();
+    _logTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _c.refreshLogs(),
+    );
   }
 
   Future<void> _startup() async {
@@ -142,7 +165,7 @@ class _TrackingScreenState extends State<TrackingScreen>
                 child: ListTile(
                   leading: const Icon(Icons.settings),
                   title: const Text('Settings incomplete'),
-                  subtitle: const Text('Enter the server URL.'),
+                  subtitle: const Text('Check the server URL and the IDs.'),
                   trailing: TextButton(
                     onPressed: _openSettings,
                     child: const Text('Open'),
@@ -150,7 +173,12 @@ class _TrackingScreenState extends State<TrackingScreen>
                 ),
               ),
             _StateCard(controller: _c, canStart: _canStart),
-            _StatusCard(status: _c.status, deviceId: _c.config?.deviceId),
+            _CompanionCard(
+              status: _c.companion,
+              running: _c.companionRunning,
+              deviceId: _c.config?.deviceId,
+            ),
+            _SdkLogCard(controller: _c),
           ],
         ),
       ),
@@ -185,11 +213,20 @@ class _StateCard extends StatelessWidget {
                   size: 32,
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  c.running ? 'Tracking is on' : 'Tracking is off',
-                  style: theme.textTheme.titleLarge,
+                Expanded(
+                  child: Text(
+                    c.running ? 'Tracking is on' : 'Tracking is off',
+                    style: theme.textTheme.titleLarge,
+                  ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              c.running
+                  ? 'Positions go to Traccar. GPS pauses while the bus is '
+                        'parked.'
+                  : 'Positions are not sent.',
             ),
             if (c.startError != null) ...[
               const SizedBox(height: 8),
@@ -215,50 +252,79 @@ class _StateCard extends StatelessWidget {
   }
 }
 
-class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.status, required this.deviceId});
+class _CompanionCard extends StatelessWidget {
+  const _CompanionCard({
+    required this.status,
+    required this.running,
+    required this.deviceId,
+  });
 
-  final TrackingStatus status;
+  final CompanionStatus status;
+  final bool running;
   final String? deviceId;
 
   @override
   Widget build(BuildContext context) {
-    final p = status.lastSent;
+    final s = status;
     final theme = Theme.of(context);
+    final eventText = StringBuffer(
+      '${s.eventQueueLength} waiting · ${s.eventsSent} sent',
+    );
+    if (s.lastEventsSentAt != null) {
+      eventText.write(' · last ${_time(s.lastEventsSentAt)}');
+    }
+    if (s.eventsDropped > 0) {
+      eventText.write(' · ${s.eventsDropped} dropped (queue full)');
+    }
+    if (!s.engineConfigured) {
+      eventText.write('\nNo engine URL set: events stay on the phone.');
+    }
+    if (s.eventError != null) {
+      eventText.write('\n${s.eventError}');
+      if (s.nextEventAttempt != null) {
+        eventText.write(' · retry ${_time(s.nextEventAttempt)}');
+      }
+    }
     return Card(
       child: Column(
         children: [
           ListTile(
-            leading: const Icon(Icons.cloud_upload),
-            title: const Text('Last sent position'),
+            leading: Icon(
+              running ? Icons.sync : Icons.sync_disabled,
+              color: running ? Colors.green : theme.disabledColor,
+            ),
+            title: const Text('Tags and device health'),
             subtitle: Text(
-              p == null
-                  ? 'Nothing sent yet'
-                  : '${p.latitude.toStringAsFixed(5)}, '
-                        '${p.longitude.toStringAsFixed(5)}'
-                        '${p.accuracy != null ? ' (±${p.accuracy!.round()} m)' : ''}\n'
-                        'Fix ${_time(p.timestamp)} · '
-                        'sent ${_time(status.lastSentAt)}',
+              running ? 'Running in the background' : 'Not running',
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.inbox),
-            title: const Text('Waiting to be sent'),
+            leading: const Icon(Icons.outbox),
+            title: const Text('Events to the Buspilot engine'),
+            subtitle: Text(eventText.toString()),
+          ),
+          ListTile(
+            leading: const Icon(Icons.bluetooth),
+            title: const Text('Tags'),
             subtitle: Text(
-              '${status.queueLength} positions'
-              '${status.droppedCount > 0 ? ' · ${status.droppedCount} dropped (queue full)' : ''}',
+              !s.tagsConfigured
+                  ? 'No tag IDs set: not scanning'
+                  : '${s.tagsPresent} on board · ${s.tagScan ?? '–'}',
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.my_location),
-            title: const Text('Last location fix'),
-            subtitle: Text(_time(status.lastFixAt)),
+            leading: const Icon(Icons.battery_std),
+            title: const Text('Battery'),
+            subtitle: Text(
+              '${s.batteryLevel != null ? '${s.batteryLevel} %' : '–'}'
+              '${s.warnings.isEmpty ? '' : ' · ${s.warnings.join(', ')}'}',
+            ),
           ),
-          if (status.error != null)
+          if (s.error != null)
             ListTile(
               leading: Icon(Icons.error, color: theme.colorScheme.error),
               title: const Text('Problem'),
-              subtitle: Text(status.error!),
+              subtitle: Text(s.error!),
             ),
           ListTile(
             leading: const Icon(Icons.badge),
@@ -269,6 +335,88 @@ class _StatusCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The Traccar Client SDK's diagnostic log, newest first.
+class _SdkLogCard extends StatelessWidget {
+  const _SdkLogCard({required this.controller});
+
+  final TrackingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final logs = controller.logs;
+    final theme = Theme.of(context);
+    final upload = lastUploadLine(logs.map((e) => e.message).toList());
+    final uploadEntry = upload == null
+        ? null
+        : logs.lastWhere((e) => e.message == upload);
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.cloud_upload),
+            title: const Text('Last position upload'),
+            subtitle: Text(
+              uploadEntry == null
+                  ? 'None in the log'
+                  : '${_time(DateTime.fromMillisecondsSinceEpoch(uploadEntry.time))} · '
+                        '${uploadEntry.message}',
+            ),
+          ),
+          ExpansionTile(
+            leading: const Icon(Icons.article),
+            title: const Text('Traccar SDK log'),
+            subtitle: Text('${logs.length} entries'),
+            expandedAlignment: Alignment.centerLeft,
+            expandedCrossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final e in logs.reversed.take(50))
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 2,
+                  ),
+                  child: Text(
+                    '${_time(DateTime.fromMillisecondsSinceEpoch(e.time))}  '
+                    '${e.message}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              OverflowBar(
+                alignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: controller.refreshLogs,
+                    child: const Text('Refresh'),
+                  ),
+                  TextButton(
+                    onPressed: controller.clearLogs,
+                    child: const Text('Clear'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The newest SDK log line about a position upload ("Upload response 200",
+/// "Upload error: ..."), or null.
+@visibleForTesting
+String? lastUploadLine(List<String> messages) {
+  for (final m in messages.reversed) {
+    if (m.startsWith('Upload response') || m.startsWith('Upload error')) {
+      return m;
+    }
+  }
+  return null;
 }
 
 String _time(DateTime? t) {
