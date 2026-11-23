@@ -102,10 +102,19 @@ void main() {
           deviceId: 'a',
           position: position(attributes: {key: 'x'}),
         ),
-        throwsArgumentError,
+        throwsA(isA<InvalidOsmAndAttribute>()),
         reason: key,
       );
     }
+  });
+
+  test('uses the device ID it is given', () {
+    final uri = buildOsmAndUri(
+      server: server,
+      deviceId: 'bus-2',
+      position: position(),
+    );
+    expect(uri.queryParameters['id'], 'bus-2');
   });
 
   test('keeps path and query of the server URL', () {

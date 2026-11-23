@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:buspilot_vehicle/src/tracking/osmand_request.dart';
 import 'package:buspilot_vehicle/src/tracking/position_queue.dart';
 import 'package:buspilot_vehicle/src/tracking/position_record.dart';
 import 'package:buspilot_vehicle/src/tracking/position_uploader.dart';
@@ -138,20 +139,89 @@ void main() {
     expect(received.length, 3);
   });
 
+  test('rejects a position with an invalid attribute at enqueue', () async {
+    final u = uploader();
+    await expectLater(
+      u.enqueue(rec(0).copyWith(attributes: {'lat': 'bad'})),
+      throwsA(isA<InvalidOsmAndAttribute>()),
+    );
+    expect(queue.isEmpty, isTrue);
+  });
+
   test(
-    'drops a position with an invalid attribute instead of blocking',
+    'sends each position under the device ID it was recorded with',
     () async {
-      final u = uploader();
-      await u.enqueue(rec(0));
-      await u.enqueue(rec(1).copyWith(attributes: {'lat': 'bad'}));
-      await u.enqueue(rec(2));
-      final first = await u.flush();
-      expect(first.sent, 1);
-      expect(first.error, contains('invalid'));
-      expect(queue.peek(10), [rec(2)]);
-      final second = await u.flush();
-      expect(second.sent, 1);
-      expect(queue.isEmpty, isTrue);
+      final u = uploader(); // default device ID: bus-1
+      PositionRecord withId(int i, String? id) => PositionRecord(
+        timestamp: rec(i).timestamp,
+        latitude: 35,
+        longitude: 139,
+        deviceId: id,
+      );
+      await u.enqueue(withId(0, 'old-bus'));
+      await u.enqueue(withId(1, null));
+      await u.flush();
+      expect(received.map((u) => u.queryParameters['id']), [
+        'old-bus',
+        'bus-1',
+      ]);
     },
   );
+
+  test('device ID survives the queue file', () async {
+    await queue.add(rec(0));
+    await queue.add(
+      PositionRecord(
+        timestamp: rec(1).timestamp,
+        latitude: 1,
+        longitude: 2,
+        deviceId: 'old-bus',
+      ),
+    );
+    final reopened = await FilePositionQueue.open(File('${dir.path}/q.jsonl'));
+    expect(reopened.peek(2).last.deviceId, 'old-bus');
+  });
+
+  test('stop ends a running flush and later flushes send nothing', () async {
+    late PositionUploader u;
+    var calls = 0;
+    final stopping = MockClient((request) async {
+      calls++;
+      if (calls == 2) u.stop();
+      return http.Response('', 200);
+    });
+    u = PositionUploader(
+      queue: queue,
+      sender: OsmAndSender(
+        client: stopping,
+        server: Uri.parse('https://x.example'),
+        deviceId: 'a',
+      ),
+    );
+    for (var i = 0; i < 5; i++) {
+      await u.enqueue(rec(i));
+    }
+    final result = await u.flush();
+    expect(result.sent, 2);
+    expect(queue.length, 3);
+    expect((await u.flush()).sent, 0);
+    expect(calls, 2);
+  });
+
+  test('reports unexpected errors and keeps the queue', () async {
+    final broken = MockClient((request) async => throw StateError('boom'));
+    final u = PositionUploader(
+      queue: queue,
+      sender: OsmAndSender(
+        client: broken,
+        server: Uri.parse('https://x.example'),
+        deviceId: 'a',
+      ),
+    );
+    await u.enqueue(rec(0));
+    final result = await u.flush();
+    expect(result.error, contains('boom'));
+    expect(u.lastError, contains('boom'));
+    expect(queue.length, 1);
+  });
 }

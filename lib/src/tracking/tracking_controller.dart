@@ -22,7 +22,7 @@ class TrackingController extends ChangeNotifier {
   static const _serviceId = 4711;
 
   /// Plain http:// servers are allowed in debug builds only.
-  static const allowHttp = !kReleaseMode;
+  static const allowHttp = kDebugMode;
 
   TrackingConfig? config;
   bool running = false;
@@ -75,7 +75,9 @@ class TrackingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> start() => _guard(() async {
+  Future<void> start() => _guard(_startService);
+
+  Future<void> _startService() async {
     startError = null;
     if (!configValid) {
       startError = 'Complete the settings first.';
@@ -94,7 +96,7 @@ class TrackingController extends ChangeNotifier {
       await store.setTrackingEnabled(true);
     }
     running = await FlutterForegroundTask.isRunningService;
-  });
+  }
 
   Future<void> stop() => _guard(() async {
     await store.setTrackingEnabled(false);
@@ -113,13 +115,14 @@ class TrackingController extends ChangeNotifier {
     await store.save(newConfig);
     config = newConfig;
     notifyListeners();
-    if (running) {
-      await _guard(() async {
-        await FlutterForegroundTask.stopService();
-        running = false;
-      });
-      await start();
-    }
+    // Restart as one guarded step, so a start/stop tap in between cannot
+    // interleave with it.
+    await _guard(() async {
+      if (!await FlutterForegroundTask.isRunningService) return;
+      await FlutterForegroundTask.stopService();
+      running = false;
+      await _startService();
+    });
   }
 
   Future<void> _guard(Future<void> Function() action) async {

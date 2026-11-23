@@ -73,6 +73,8 @@ class TrackingPermissions {
     await Geolocator.requestPermission();
   }
 
+  Future<void> openAppSettings() => Geolocator.openAppSettings();
+
   Future<void> openLocationSettings() => Geolocator.openLocationSettings();
 
   Future<void> requestBatteryExemption() =>

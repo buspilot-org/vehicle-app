@@ -16,6 +16,24 @@ const reservedOsmAndKeys = {
   'batt',
 };
 
+/// Thrown for an extra attribute that cannot be sent as an OsmAnd parameter.
+class InvalidOsmAndAttribute implements Exception {
+  InvalidOsmAndAttribute(this.key);
+  final String key;
+  @override
+  String toString() => 'Empty or reserved OsmAnd parameter name: "$key"';
+}
+
+/// Throws [InvalidOsmAndAttribute] if a key in [attributes] is empty or
+/// clashes with a standard OsmAnd parameter.
+void validateOsmAndAttributes(Map<String, String> attributes) {
+  for (final key in attributes.keys) {
+    if (key.isEmpty || reservedOsmAndKeys.contains(key.toLowerCase())) {
+      throw InvalidOsmAndAttribute(key);
+    }
+  }
+}
+
 /// Knots per metre per second. Traccar's OsmAnd decoder reads `speed` in
 /// knots, like Traccar Client sends it.
 const _knotsPerMps = 1.943844;
@@ -26,7 +44,8 @@ const _knotsPerMps = 1.943844;
 /// query string (`?id=...&lat=...&lon=...`). Query parameters already in
 /// [server] are kept; position parameters win on a clash.
 ///
-/// Throws [ArgumentError] if an extra attribute uses an empty or reserved key.
+/// Throws [InvalidOsmAndAttribute] if an extra attribute uses an empty or
+/// reserved key.
 Uri buildOsmAndUri({
   required Uri server,
   required String deviceId,
@@ -48,17 +67,8 @@ Uri buildOsmAndUri({
       'accuracy': position.accuracy!.toStringAsFixed(1),
     if (position.battery != null) 'batt': position.battery!.toString(),
   };
-  for (final entry in position.attributes.entries) {
-    final key = entry.key;
-    if (key.isEmpty || reservedOsmAndKeys.contains(key.toLowerCase())) {
-      throw ArgumentError.value(
-        key,
-        'attributes',
-        'Empty or reserved OsmAnd parameter name',
-      );
-    }
-    params[key] = entry.value;
-  }
+  validateOsmAndAttributes(position.attributes);
+  params.addAll(position.attributes);
   return server.replace(
     path: server.path.isEmpty ? '/' : server.path,
     queryParameters: params,

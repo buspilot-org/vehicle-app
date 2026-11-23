@@ -38,12 +38,15 @@ class TrackingTaskHandler extends TaskHandler {
   DateTime? _lastFixAt;
   String? _locationError;
   String? _configError;
+  String? _queueError;
+  String _deviceId = '';
+  bool _stopping = false;
   String _notificationText = '';
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     final config = await ConfigStore().load();
-    if (!config.isValid(allowHttp: !kReleaseMode)) {
+    if (!config.isValid(allowHttp: kDebugMode)) {
       _configError = 'Settings are incomplete. Open the app to fix them.';
       _publish();
       return;
@@ -63,13 +66,17 @@ class TrackingTaskHandler extends TaskHandler {
         deviceId: config.deviceId,
       ),
     );
+    _deviceId = config.deviceId;
     _interval = Duration(seconds: config.intervalSeconds);
     _filter = PositionFilter(
       interval: _interval,
       distanceFilterMeters: config.distanceFilterMeters,
     );
     _listenToPositions();
-    await _flush();
+    // Not awaited: the repeat event (which re-subscribes to locations after
+    // an error) only starts once onStart returns, and a long backlog can take
+    // a while to send.
+    unawaited(_flush());
   }
 
   void _listenToPositions() {
@@ -100,6 +107,7 @@ class TrackingTaskHandler extends TaskHandler {
   }
 
   Future<void> _onPosition(Position p) async {
+    if (_stopping) return;
     _lastFixAt = DateTime.now();
     _locationError = null;
     final record = PositionRecord(
@@ -111,9 +119,18 @@ class TrackingTaskHandler extends TaskHandler {
       altitude: p.altitude,
       accuracy: p.accuracy > 0 ? p.accuracy : null,
       battery: await _batteryLevel(),
+      deviceId: _deviceId,
     );
-    if (_filter?.accept(record) != true) return;
-    await _uploader?.enqueue(record);
+    if (_stopping || _filter?.accept(record) != true) return;
+    try {
+      await _uploader?.enqueue(record);
+      _queueError = null;
+    } catch (e) {
+      // For example a full disk. The position is lost; say so.
+      _queueError = 'Could not store position: $e';
+      _publish();
+      return;
+    }
     await _flush();
   }
 
@@ -140,7 +157,7 @@ class TrackingTaskHandler extends TaskHandler {
 
   Future<void> _flush() async {
     final uploader = _uploader;
-    if (uploader == null) return;
+    if (uploader == null || _stopping) return;
     _publish(); // Show the new queue length right away.
     await uploader.flush();
     _publish();
@@ -155,18 +172,20 @@ class TrackingTaskHandler extends TaskHandler {
       lastFixAt: _lastFixAt,
       queueLength: queue?.length ?? 0,
       droppedCount: queue?.droppedCount ?? 0,
-      error: _configError ?? _locationError ?? uploader?.lastError,
+      error:
+          _configError ?? _locationError ?? _queueError ?? uploader?.lastError,
     );
     FlutterForegroundTask.sendDataToMain(status.toMessage());
     _updateNotification(status);
   }
 
   void _updateNotification(TrackingStatus status) {
-    // No coordinates here: the notification is visible on the lock screen.
+    // Fixed texts only: the notification is visible on the lock screen, and
+    // error details (which may name the server) stay inside the app.
     final text = status.error != null
         ? status.queueLength > 0
-              ? '${status.error} · ${status.queueLength} positions waiting'
-              : status.error!
+              ? 'Not sending · ${status.queueLength} positions waiting'
+              : 'Problem · open the app for details'
         : status.queueLength > 1
         ? 'Sending positions · ${status.queueLength} waiting'
         : 'Sending positions';
@@ -177,8 +196,20 @@ class TrackingTaskHandler extends TaskHandler {
 
   @override
   Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
+    _stopping = true;
     await _positions?.cancel();
     _positions = null;
+    // Let a running send and queue write finish, so a restarted service does
+    // not open the queue file while this isolate still writes it.
+    final uploader = _uploader;
+    final queue = _queue;
+    uploader?.stop();
+    try {
+      await Future.wait([?uploader?.idle, ?queue?.idle])
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Timed out or failed: nothing more to do while shutting down.
+    }
     _client?.close();
   }
 }

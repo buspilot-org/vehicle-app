@@ -124,14 +124,22 @@ class FilePositionQueue {
 
   Future<void> _rewrite() async {
     final tmp = File('${_file.path}.tmp');
-    final sink = tmp.openWrite();
+    final buffer = StringBuffer();
     for (final item in _items) {
-      sink.writeln(jsonEncode(item.toJson()));
+      buffer.writeln(jsonEncode(item.toJson()));
     }
-    await sink.flush();
-    await sink.close();
+    final raf = await tmp.open(mode: FileMode.write);
+    try {
+      await raf.writeString(buffer.toString());
+      await raf.flush(); // fsync, so a power cut cannot leave an empty file
+    } finally {
+      await raf.close();
+    }
     await tmp.rename(_file.path);
   }
+
+  /// Completes when all pending writes have finished.
+  Future<void> get idle => _lock;
 
   Future<T> _synchronized<T>(Future<T> Function() action) {
     final result = _lock.then((_) => action());

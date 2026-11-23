@@ -9,6 +9,7 @@ class PositionRecord {
     this.altitude,
     this.accuracy,
     this.battery,
+    this.deviceId,
     Map<String, String> attributes = const {},
   }) : timestamp = timestamp.toUtc(),
        attributes = Map.unmodifiable(attributes);
@@ -35,6 +36,11 @@ class PositionRecord {
   /// Phone battery level in percent, 0-100.
   final int? battery;
 
+  /// Traccar device ID this position was recorded under. Stored with the
+  /// queued position so that a backlog is still sent under the right ID
+  /// after the device ID was changed in the settings.
+  final String? deviceId;
+
   /// Extra OsmAnd query parameters, stored by Traccar as position attributes
   /// (for example BLE tags seen at this position). Keys must not clash with
   /// the standard OsmAnd parameters, see `reservedOsmAndKeys`.
@@ -49,6 +55,7 @@ class PositionRecord {
     altitude: altitude,
     accuracy: accuracy,
     battery: battery,
+    deviceId: deviceId,
     attributes: attributes ?? this.attributes,
   );
 
@@ -61,6 +68,7 @@ class PositionRecord {
     if (altitude != null) 'alt': altitude,
     if (accuracy != null) 'acc': accuracy,
     if (battery != null) 'bat': battery,
+    if (deviceId != null) 'dev': deviceId,
     if (attributes.isNotEmpty) 'attr': attributes,
   };
 
@@ -80,6 +88,7 @@ class PositionRecord {
         altitude: (json['alt'] as num?)?.toDouble(),
         accuracy: (json['acc'] as num?)?.toDouble(),
         battery: json['bat'] as int?,
+        deviceId: json['dev'] as String?,
         attributes: attr == null
             ? const {}
             : attr.map((k, v) => MapEntry(k, v! as String)),
@@ -100,6 +109,7 @@ class PositionRecord {
       other.altitude == altitude &&
       other.accuracy == accuracy &&
       other.battery == battery &&
+      other.deviceId == deviceId &&
       _mapEquals(other.attributes, attributes);
 
   @override
@@ -112,6 +122,7 @@ class PositionRecord {
     altitude,
     accuracy,
     battery,
+    deviceId,
     Object.hashAllUnordered(
       attributes.entries.map((e) => Object.hash(e.key, e.value)),
     ),

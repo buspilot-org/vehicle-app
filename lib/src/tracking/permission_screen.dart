@@ -20,6 +20,11 @@ class _PermissionScreenState extends State<PermissionScreen>
     with WidgetsBindingObserver {
   PermissionState? _state;
 
+  /// Set once "all the time" was requested. If Android then still reports
+  /// "while in use", it no longer shows the request (the user denied it
+  /// before), so the step offers the app settings instead.
+  bool _backgroundRequested = false;
+
   @override
   void initState() {
     super.initState();
@@ -93,11 +98,18 @@ class _PermissionScreenState extends State<PermissionScreen>
                   text:
                       'Choose "Allow all the time", so tracking keeps '
                       'running with the screen off and restarts after the '
-                      'phone reboots.',
+                      'phone reboots.'
+                      '${_backgroundRequested ? ' In the app settings, open '
+                                'Permissions › Location.' : ''}',
                   done: s.locationAlways,
                   enabled: s.locationWhileInUse,
-                  action: 'Allow',
-                  onPressed: () => _run(p.requestLocation),
+                  action: _backgroundRequested ? 'Open settings' : 'Allow',
+                  onPressed: _backgroundRequested
+                      ? () => _run(p.openAppSettings)
+                      : () => _run(() async {
+                          await p.requestLocation();
+                          _backgroundRequested = true;
+                        }),
                 ),
                 _Step(
                   number: 4,

@@ -26,6 +26,8 @@ class OsmAndSender {
 
   final http.Client client;
   final Uri server;
+
+  /// Used for positions that carry no device ID of their own.
   final String deviceId;
   final Duration timeout;
 
@@ -33,7 +35,7 @@ class OsmAndSender {
   Future<void> send(PositionRecord position) async {
     final uri = buildOsmAndUri(
       server: server,
-      deviceId: deviceId,
+      deviceId: position.deviceId ?? deviceId,
       position: position,
     );
     final http.Response response;
@@ -76,7 +78,7 @@ class PositionUploader {
   PositionUploader({
     required this.queue,
     required this.sender,
-    this.commitEvery = 50,
+    this.commitEvery = 100,
   });
 
   final FilePositionQueue queue;
@@ -92,9 +94,23 @@ class PositionUploader {
   String? lastError;
 
   Future<FlushResult>? _running;
+  bool _stopped = false;
+
+  /// Makes a running flush stop after the position it is sending now, and
+  /// later flushes do nothing. Used when the service shuts down.
+  void stop() => _stopped = true;
 
   /// Adds [position] to the queue (it is sent by the next [flush]).
-  Future<void> enqueue(PositionRecord position) => queue.add(position);
+  ///
+  /// Throws [InvalidOsmAndAttribute] for a position that could never be sent,
+  /// so it does not get into the queue and block it.
+  Future<void> enqueue(PositionRecord position) async {
+    validateOsmAndAttributes(position.attributes);
+    await queue.add(position);
+  }
+
+  /// Completes when no flush is running.
+  Future<void> get idle => _running?.then((_) {}) ?? Future.value();
 
   /// Sends queued positions, oldest first, until the queue is empty or a send
   /// fails. Concurrent calls share the same run.
@@ -109,8 +125,9 @@ class PositionUploader {
     try {
       while (true) {
         final batch = queue.peek(commitEvery);
-        if (batch.isEmpty) break;
+        if (batch.isEmpty || _stopped) break;
         for (final position in batch) {
+          if (_stopped) break;
           await sender.send(position);
           sent++;
           uncommitted.add(position);
@@ -123,17 +140,20 @@ class PositionUploader {
       lastError = null;
     } on SendException catch (e) {
       error = e.message;
-      lastError = error;
-    } on ArgumentError catch (e) {
-      // A record that can never be sent (bad attribute key). Drop it so it
-      // does not block the queue forever.
-      final bad = queue.peek(uncommitted.length + 1);
-      if (bad.length > uncommitted.length) uncommitted.add(bad.last);
-      error = 'Dropped an invalid position: ${e.message}';
-      lastError = error;
+    } catch (e) {
+      // For example a full disk while rewriting the queue file. Keep
+      // everything queued and report it; the next flush tries again.
+      error = 'Unexpected error: $e';
     } finally {
-      if (uncommitted.isNotEmpty) await queue.removeSent(uncommitted);
+      if (uncommitted.isNotEmpty) {
+        try {
+          await queue.removeSent(uncommitted);
+        } catch (e) {
+          error ??= 'Unexpected error: $e';
+        }
+      }
     }
+    if (error != null) lastError = error;
     return FlushResult(sent: sent, error: error);
   }
 }
