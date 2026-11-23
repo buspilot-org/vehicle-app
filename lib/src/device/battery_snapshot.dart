@@ -26,7 +26,7 @@ class BatterySnapshot {
     this.cycleCount,
   });
 
-  /// Parses the map sent by `BatteryReader.kt`.
+  /// Parses the map sent by `BatteryReader.kt` (packages/buspilot_battery).
   factory BatterySnapshot.fromMap(
     Map<Object?, Object?> map,
     DateTime timestamp,
@@ -70,16 +70,4 @@ class BatterySnapshot {
 
   /// Whether the battery is at 100 % with power connected.
   bool get isFullOnPower => isPlugged && (level ?? 0) >= 100;
-
-  /// Attributes for a tracked position (OsmAnd protocol query parameters).
-  /// `batt` and `charge` are understood by Traccar directly; the others end
-  /// up as custom position attributes. Unknown values are left out.
-  Map<String, Object> toPositionAttributes() {
-    return {
-      'batt': ?level,
-      'charge': isPlugged,
-      'batteryTemp': ?temperatureC,
-      if (health != BatteryHealth.unknown) 'batteryHealth': health.name,
-    };
-  }
 }

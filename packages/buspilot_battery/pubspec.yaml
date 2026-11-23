@@ -1,0 +1,24 @@
+name: buspilot_battery
+description: "Android battery reader for the Buspilot vehicle app. A plugin (not an app channel) so it also works in the background service's Flutter engine."
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.14.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: org.buspilot.buspilot_battery
+        pluginClass: BuspilotBatteryPlugin

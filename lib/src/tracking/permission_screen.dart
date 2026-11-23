@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'tracking_permissions.dart';
 
@@ -20,10 +21,11 @@ class _PermissionScreenState extends State<PermissionScreen>
     with WidgetsBindingObserver {
   PermissionState? _state;
 
-  /// Set once "all the time" was requested. If Android then still reports
-  /// "while in use", it no longer shows the request (the user denied it
-  /// before), so the step offers the app settings instead.
-  bool _backgroundRequested = false;
+  /// Set once "all the time" was requested. If Android then still reports it
+  /// as missing, it does not show the request again (the user declined it
+  /// before), whatever permission_handler reports, so the step offers the
+  /// app settings instead.
+  bool _alwaysRequested = false;
 
   @override
   void initState() {
@@ -58,6 +60,8 @@ class _PermissionScreenState extends State<PermissionScreen>
   Widget build(BuildContext context) {
     final s = _state;
     final p = widget.permissions;
+    String action(PermissionStatus status) =>
+        status.isPermanentlyDenied ? 'Open settings' : 'Allow';
     return Scaffold(
       appBar: AppBar(title: const Text('Permissions')),
       body: s == null
@@ -77,8 +81,8 @@ class _PermissionScreenState extends State<PermissionScreen>
                   text:
                       'A permanent notification shows that tracking is '
                       'running.',
-                  done: s.notifications,
-                  action: 'Allow',
+                  done: s.notificationsGranted,
+                  action: action(s.notifications),
                   onPressed: () => _run(p.requestNotifications),
                 ),
                 _Step(
@@ -86,10 +90,10 @@ class _PermissionScreenState extends State<PermissionScreen>
                   title: 'Location',
                   text: s.locationDeniedForever
                       ? 'Location was denied. Open the app settings and '
-                            'allow location.'
-                      : 'Needed to know where the bus is.',
+                            'allow precise location.'
+                      : 'Needed to know where the bus is. Choose "Precise".',
                   done: s.locationWhileInUse,
-                  action: s.locationDeniedForever ? 'Open settings' : 'Allow',
+                  action: action(s.location),
                   onPressed: () => _run(p.requestLocation),
                 ),
                 _Step(
@@ -99,20 +103,32 @@ class _PermissionScreenState extends State<PermissionScreen>
                       'Choose "Allow all the time", so tracking keeps '
                       'running with the screen off and restarts after the '
                       'phone reboots.'
-                      '${_backgroundRequested ? ' In the app settings, open '
+                      '${_alwaysRequested ? ' In the app settings, open '
                                 'Permissions › Location.' : ''}',
-                  done: s.locationAlways,
+                  done: s.locationAlwaysGranted,
                   enabled: s.locationWhileInUse,
-                  action: _backgroundRequested ? 'Open settings' : 'Allow',
-                  onPressed: _backgroundRequested
-                      ? () => _run(p.openAppSettings)
+                  action: _alwaysRequested
+                      ? 'Open settings'
+                      : action(s.locationAlways),
+                  onPressed: _alwaysRequested
+                      ? () => _run(p.openSettings)
                       : () => _run(() async {
-                          await p.requestLocation();
-                          _backgroundRequested = true;
+                          await p.requestLocationAlways();
+                          _alwaysRequested = true;
                         }),
                 ),
                 _Step(
                   number: 4,
+                  title: 'Physical activity',
+                  text:
+                      'Lets the phone notice when the bus is parked and '
+                      'switch GPS off to save battery.',
+                  done: s.activityGranted,
+                  action: action(s.activityRecognition),
+                  onPressed: () => _run(p.requestActivityRecognition),
+                ),
+                _Step(
+                  number: 5,
                   title: 'Location switched on',
                   text: 'Location must be on in the phone settings.',
                   done: s.locationServiceOn,
@@ -120,19 +136,29 @@ class _PermissionScreenState extends State<PermissionScreen>
                   onPressed: () => _run(p.openLocationSettings),
                 ),
                 _Step(
-                  number: 5,
-                  title: 'No battery optimisation (recommended)',
+                  number: 6,
+                  title: 'No battery optimisation',
                   text: 'Stops Android from pausing tracking to save power.',
                   done: s.batteryOptimizationOff,
                   action: 'Allow',
                   onPressed: () => _run(p.requestBatteryExemption),
+                ),
+                _Step(
+                  number: 7,
+                  title: 'Nearby devices (recommended)',
+                  text:
+                      'Needed to detect the Bluetooth tags on board. Not '
+                      'needed if this bus uses no tags.',
+                  done: s.bluetoothGranted,
+                  action: action(s.bluetooth),
+                  onPressed: () => _run(p.requestBluetooth),
                 ),
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: s.requiredGranted
                       ? () => Navigator.of(context).pop(true)
                       : null,
-                  child: Text(s.requiredGranted ? 'Done' : 'Steps 1–4 needed'),
+                  child: Text(s.requiredGranted ? 'Done' : 'Steps 1–6 needed'),
                 ),
               ],
             ),

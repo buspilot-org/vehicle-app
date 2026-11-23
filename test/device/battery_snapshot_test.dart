@@ -36,25 +36,4 @@ void main() {
     expect(s.health, BatteryHealth.unknown);
     expect(s.isPlugged, isFalse);
   });
-
-  test('position attributes', () {
-    final s = BatterySnapshot(
-      timestamp: now,
-      level: 64,
-      source: PowerSource.ac,
-      health: BatteryHealth.overheat,
-      temperatureC: 47.2,
-    );
-    expect(s.toPositionAttributes(), {
-      'batt': 64,
-      'charge': true,
-      'batteryTemp': 47.2,
-      'batteryHealth': 'overheat',
-    });
-  });
-
-  test('position attributes leave out unknown values', () {
-    final s = BatterySnapshot(timestamp: now, source: PowerSource.none);
-    expect(s.toPositionAttributes(), {'charge': false});
-  });
 }

@@ -9,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('org.buspilot.vehicle/device');
+  // getBattery is served by the buspilot_battery plugin.
+  const batteryChannel = MethodChannel('org.buspilot.vehicle/battery');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   final now = DateTime.utc(2026, 11, 23, 8);
@@ -16,10 +18,15 @@ void main() {
   DeviceHealthMonitor monitor() =>
       DeviceHealthMonitor(channel: DeviceChannel(clock: () => now));
 
-  void mock(Future<Object?> Function(MethodCall call) handler) =>
-      messenger.setMockMethodCallHandler(channel, handler);
+  void mock(Future<Object?> Function(MethodCall call) handler) {
+    messenger.setMockMethodCallHandler(channel, handler);
+    messenger.setMockMethodCallHandler(batteryChannel, handler);
+  }
 
-  tearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  tearDown(() {
+    messenger.setMockMethodCallHandler(channel, null);
+    messenger.setMockMethodCallHandler(batteryChannel, null);
+  });
 
   test('reads battery and device state and evaluates warnings', () async {
     mock(
@@ -97,5 +104,21 @@ void main() {
     gate.complete();
     await pending; // Would fail the "used after dispose" assertion.
     expect(notified, isFalse);
+  });
+
+  test('readDeviceState: false reads only the battery', () async {
+    final methods = <String>[];
+    mock((call) async {
+      methods.add(call.method);
+      return {'available': true, 'level': 40};
+    });
+    final m = DeviceHealthMonitor(
+      channel: DeviceChannel(clock: () => now),
+      readDeviceState: false,
+    );
+    await m.refresh();
+    expect(methods, ['getBattery']);
+    expect(m.snapshot?.level, 40);
+    expect(m.error, isNull);
   });
 }

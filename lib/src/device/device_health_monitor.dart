@@ -10,17 +10,21 @@ import 'device_warnings.dart';
 
 /// Polls the battery and dedicated-phone state and keeps the current warnings.
 ///
-/// [snapshot] is what tracking can attach to positions later
-/// (see [BatterySnapshot.toPositionAttributes]).
+/// In the background service there is no activity, so pass
+/// `readDeviceState: false` there: only the battery is read.
 class DeviceHealthMonitor extends ChangeNotifier {
   DeviceHealthMonitor({
     DeviceChannel? channel,
     this.config = const DeviceHealthConfig(),
+    this.readDeviceState = true,
   }) : channel = channel ?? DeviceChannel(),
        _tracker = FullChargeTracker(config: config);
 
   final DeviceChannel channel;
   final DeviceHealthConfig config;
+
+  /// Whether to read [deviceState] (needs the activity's channel).
+  final bool readDeviceState;
   final FullChargeTracker _tracker;
   Timer? _timer;
 
@@ -53,9 +57,9 @@ class DeviceHealthMonitor extends ChangeNotifier {
   Future<void> _refresh() async {
     try {
       final battery = await channel.readBattery();
-      final state = await channel.readDeviceState();
+      final state = readDeviceState ? await channel.readDeviceState() : null;
       if (_disposed) return;
-      deviceState = state;
+      if (state != null) deviceState = state;
       snapshot = battery;
       if (battery != null) {
         _tracker.update(battery);

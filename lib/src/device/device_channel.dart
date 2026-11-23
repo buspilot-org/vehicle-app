@@ -1,3 +1,4 @@
+import 'package:buspilot_battery/buspilot_battery.dart';
 import 'package:flutter/services.dart';
 
 import 'battery_snapshot.dart';
@@ -32,22 +33,30 @@ class DeviceState {
   final bool ignoringBatteryOptimizations;
 }
 
-/// Talks to `DeviceChannel.kt`.
+/// Talks to `DeviceChannel.kt` (activity engine only) and to the
+/// `buspilot_battery` plugin (every engine, including the background service).
 class DeviceChannel {
-  DeviceChannel({MethodChannel? channel, DateTime Function()? clock})
-    : _channel = channel ?? const MethodChannel('org.buspilot.vehicle/device'),
-      _clock = clock ?? DateTime.now;
+  DeviceChannel({
+    MethodChannel? channel,
+    BuspilotBattery? battery,
+    DateTime Function()? clock,
+  }) : _channel = channel ?? const MethodChannel('org.buspilot.vehicle/device'),
+       _battery = battery ?? BuspilotBattery(),
+       _clock = clock ?? DateTime.now;
 
   final MethodChannel _channel;
+  final BuspilotBattery _battery;
   final DateTime Function() _clock;
 
-  /// Current battery reading, or null if the platform has none.
+  /// Current battery reading, or null if the platform has none. Works in the
+  /// background service too.
   Future<BatterySnapshot?> readBattery() async {
-    final map = await _channel.invokeMapMethod<Object?, Object?>('getBattery');
+    final map = await _battery.read();
     if (map == null || map['available'] != true) return null;
     return BatterySnapshot.fromMap(map, _clock());
   }
 
+  /// Activity engine only (throws [MissingPluginException] elsewhere).
   Future<DeviceState> readDeviceState() async {
     final map = await _channel.invokeMapMethod<Object?, Object?>(
       'getDeviceState',
@@ -64,4 +73,14 @@ class DeviceChannel {
   Future<bool> openBatteryOptimizationSettings() async =>
       await _channel.invokeMethod<bool>('openBatteryOptimizationSettings') ??
       false;
+
+  /// Opens the system Location settings. Returns false if it could not be
+  /// opened (for example while in kiosk mode).
+  Future<bool> openLocationSettings() async =>
+      await _channel.invokeMethod<bool>('openLocationSettings') ?? false;
+
+  /// Deletes one of the app's notification channels (cleanup after an
+  /// update). Activity engine only.
+  Future<void> deleteNotificationChannel(String id) =>
+      _channel.invokeMethod<void>('deleteNotificationChannel', {'id': id});
 }
