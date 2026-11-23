@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'battery_snapshot.dart';
@@ -43,24 +44,52 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen>
     super.dispose();
   }
 
-  Future<void> _enterKiosk() async {
-    await _monitor.channel.enterKiosk();
+  Future<void> _enterKiosk() => _runKioskAction(_monitor.channel.enterKiosk);
+
+  Future<void> _exitKiosk() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Leave kiosk mode?'),
+        content: const Text(
+          'Other apps and the system settings become usable on this phone. '
+          'Kiosk mode stays off after a restart until you start it again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Leave kiosk mode'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await _runKioskAction(_monitor.channel.exitKiosk);
+  }
+
+  Future<void> _runKioskAction(Future<void> Function() action) async {
+    try {
+      await action();
+    } on PlatformException catch (e) {
+      _showMessage('Kiosk mode: ${e.message ?? e.code}');
+    } on MissingPluginException {
+      _showMessage('Kiosk mode is only available on Android.');
+    }
     await _monitor.refresh();
   }
 
-  Future<void> _exitKiosk() async {
-    await _monitor.channel.exitKiosk();
-    await _monitor.refresh();
+  void _showMessage(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   Future<void> _openBatterySettings() async {
     final opened = await _monitor.channel.openBatteryOptimizationSettings();
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open the settings. Leave kiosk mode first.'),
-        ),
-      );
+    if (!opened) {
+      _showMessage('Could not open the settings. Leave kiosk mode first.');
     }
   }
 
@@ -216,11 +245,15 @@ class _DedicatedPhoneCard extends StatelessWidget {
                 if (inLockTask)
                   // Long press only, so a stray tap does not leave kiosk mode.
                   OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Long-press to leave kiosk mode.'),
+                      ),
+                    ),
                     onLongPress: onExitKiosk,
                     child: const Text('Leave kiosk mode (long-press)'),
                   ),
-                if (!state.ignoringBatteryOptimizations)
+                if (!state.ignoringBatteryOptimizations && !inLockTask)
                   OutlinedButton(
                     onPressed: onOpenBatterySettings,
                     child: const Text('Battery optimisation settings'),

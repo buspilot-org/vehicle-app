@@ -38,18 +38,18 @@ Check the result on the app's **Device status** screen: "Device owner" shows
 "yes", and "Kiosk" shows "locked (device owner)".
 
 > **Removing device owner.** The app cannot be uninstalled while it is device
-> owner, and `adb shell dpm remove-active-admin` does not work for it. To give
-> the phone another use, factory-reset it (Settings → System → Reset options,
-> or the recovery menu).
+> owner, and `adb shell dpm remove-active-admin` only works for test-only
+> builds. The app has no "release device owner" action yet, so to give the
+> phone another use, factory-reset it (Settings → System → Reset options, or
+> the recovery menu).
 
 Without device owner the app still works, with two limits:
 
 - Kiosk mode uses Android **screen pinning**. Turn it on first (Settings →
   Security → App pinning; the name varies by vendor), then tap **Start kiosk
   mode** on the status screen and confirm the dialog.
-- Android 10 and later do not let the app open itself after a reboot. The
-  workaround is to allow **Display over other apps** for the app, but device
-  owner is the better setup.
+- Android 10 and later do not let the app open itself after a reboot, so
+  someone has to open it by hand.
 
 ## 3. Kiosk mode
 
@@ -57,8 +57,9 @@ Without device owner the app still works, with two limits:
   it comes to the foreground, also after a reboot. The power menu and the
   status bar information (clock, battery) stay available.
 - **Leave kiosk mode:** on the Device status screen, **long-press** "Leave
-  kiosk mode". The app then stays out of kiosk mode, also after reboots, until
-  someone taps **Start kiosk mode** again.
+  kiosk mode" and confirm. The app then stays out of kiosk mode, also after
+  reboots, until someone taps **Start kiosk mode** again. This is not
+  protected by a PIN yet, so anyone in the bus who knows it can do it.
 - In kiosk mode the app cannot open system settings. Leave kiosk mode first
   when you need them.
 
@@ -67,7 +68,7 @@ Without device owner the app still works, with two limits:
 The app listens for `BOOT_COMPLETED` (and for app updates) and opens itself.
 This needs:
 
-- device owner (section 2) or "Display over other apps",
+- device owner (section 2); Android 10 and later block the start otherwise,
 - no screen lock (section 1).
 
 ## 5. Battery care
@@ -96,10 +97,12 @@ Many phones can stop charging at about 80–90 % instead of 100 %. The setting
 is in the battery settings and its name depends on the vendor, for example
 "Protect battery" or "Battery protection" on Samsung, "Battery Care" on Sony,
 "Intelligent charging" (インテリジェントチャージ) on Sharp AQUOS, or "Charging
-optimisation" on Pixel. Turn it on if the phone has it, and choose the fixed
-limit rather than an "adaptive" mode that learns a nightly schedule.
+optimization" on Pixel. Turn it on if the phone has it, and choose the fixed
+limit (for example 80 %) rather than a "basic" or "adaptive" mode that still
+charges to 100 %.
 
-When the limit works, the battery never reaches 100 %. The app warns when the
+When the limit works, the battery rarely or never reaches 100 % (some phones
+charge to 100 % now and then to calibrate). The app warns when the
 battery has been at 100 % on power for a long time (6 hours by default), which
 usually means the limit is off or not supported.
 

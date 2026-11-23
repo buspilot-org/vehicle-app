@@ -26,11 +26,16 @@ object DeviceChannel {
                     result.success(null)
                 }
                 "openBatteryOptimizationSettings" -> {
+                    // Lock task mode silently blocks other apps' activities.
+                    if (KioskController.lockTaskState(activity) != "none") {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
                     try {
                         activity.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                         result.success(true)
                     } catch (e: RuntimeException) {
-                        // No such screen, or blocked while in lock task mode.
+                        // No such settings screen on this phone.
                         result.success(false)
                     }
                 }

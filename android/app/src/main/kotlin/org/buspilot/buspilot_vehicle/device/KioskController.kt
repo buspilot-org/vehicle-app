@@ -92,7 +92,7 @@ object KioskController {
                         DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO,
                 )
             }
-        } catch (e: SecurityException) {
+        } catch (e: RuntimeException) {
             Log.w(TAG, "Could not configure lock task as device owner", e)
         }
     }

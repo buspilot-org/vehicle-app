@@ -10,17 +10,16 @@ import org.buspilot.buspilot_vehicle.MainActivity
  * Starts the app after the phone boots (or after the app was updated), so a
  * dedicated phone in a bus recovers from a restart without anyone touching it.
  *
- * Android 10+ blocks activity starts from the background. The start is allowed
- * when the app is device owner (the recommended setup, see
- * docs/dedicated-phone.md) or has the "display over other apps" permission;
- * otherwise Android ignores it and the app has to be opened by hand.
+ * Android 10+ blocks activity starts from the background. Device owner apps
+ * are exempt, so this only works reliably when the app is provisioned as
+ * device owner (see docs/dedicated-phone.md); otherwise Android ignores the
+ * start and the app has to be opened by hand.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED,
-            ACTION_QUICKBOOT_POWERON -> launch(context)
+            Intent.ACTION_MY_PACKAGE_REPLACED -> launch(context)
         }
     }
 
@@ -32,10 +31,5 @@ class BootReceiver : BroadcastReceiver() {
         } catch (e: RuntimeException) {
             Log.w("BuspilotBoot", "Could not start MainActivity after boot", e)
         }
-    }
-
-    companion object {
-        // Sent instead of BOOT_COMPLETED by some vendors' fast boot.
-        private const val ACTION_QUICKBOOT_POWERON = "android.intent.action.QUICKBOOT_POWERON"
     }
 }

@@ -42,10 +42,20 @@ class DeviceHealthMonitor extends ChangeNotifier {
     _timer = null;
   }
 
-  Future<void> refresh() async {
+  bool _disposed = false;
+  Future<void>? _inFlight;
+
+  /// Reads the battery and device state once. Overlapping calls share one
+  /// read, so readings reach the tracker in order.
+  Future<void> refresh() =>
+      _inFlight ??= _refresh().whenComplete(() => _inFlight = null);
+
+  Future<void> _refresh() async {
     try {
       final battery = await channel.readBattery();
-      deviceState = await channel.readDeviceState();
+      final state = await channel.readDeviceState();
+      if (_disposed) return;
+      deviceState = state;
       snapshot = battery;
       if (battery != null) {
         _tracker.update(battery);
@@ -58,16 +68,20 @@ class DeviceHealthMonitor extends ChangeNotifier {
         warnings = const [];
       }
       error = null;
-    } on PlatformException catch (e) {
-      error = e.message ?? e.code;
     } on MissingPluginException {
       error = 'Device information is only available on Android.';
+    } on PlatformException catch (e) {
+      error = e.message ?? e.code;
+    } catch (e) {
+      // Unexpected data from the platform; keep polling.
+      error = 'Could not read device state: $e';
     }
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   @override
   void dispose() {
+    _disposed = true;
     stop();
     super.dispose();
   }

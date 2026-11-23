@@ -23,7 +23,8 @@ object BatteryReader {
 
         val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
         val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-        val percent = if (level >= 0 && scale > 0) Math.round(level * 100f / scale) else null
+        // Floor, so "100" only means really full (99.5 % must not count).
+        val percent = if (level >= 0 && scale > 0) level * 100 / scale else null
 
         val temperatureTenths = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
         val voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
