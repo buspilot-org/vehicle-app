@@ -8,6 +8,9 @@ import 'beacon.dart';
 /// namespaces. The same filter is also pushed down to the Android scanner as
 /// hardware scan filters ([toScanFilter]), so other beacons nearby are not even
 /// delivered to the app.
+///
+/// Configure each tag to send a single format: a tag that sends both iBeacon
+/// and Eddystone-UID (Teltonika EYE can) has two tag IDs and counts twice.
 class TagFilter {
   /// Only beacons with one of these iBeacon UUIDs or Eddystone namespaces.
   /// Invalid entries throw [FormatException]. With both lists empty nothing

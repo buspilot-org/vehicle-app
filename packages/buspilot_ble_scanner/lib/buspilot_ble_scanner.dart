@@ -70,8 +70,14 @@ class BuspilotBleScanner {
   Future<bool> isBluetoothEnabled() async =>
       await _methods.invokeMethod<bool>('isBluetoothEnabled') ?? false;
 
+  /// Whether the system Location switch is on. Android delivers no beacon
+  /// scan results while it is off.
+  Future<bool> isLocationEnabled() async =>
+      await _methods.invokeMethod<bool>('isLocationEnabled') ?? false;
+
   /// Starts scanning when listened to and stops when the subscription is
-  /// cancelled. Errors (e.g. `bluetooth_off`, `permission_denied`,
+  /// cancelled. Errors (e.g. `bluetooth_off`, `location_off`,
+  /// `permission_denied` (also when only approximate location is granted),
   /// `scan_failed`) arrive as [PlatformException]s on the stream.
   ///
   /// Only one scan can run at a time; listening again replaces the scan.

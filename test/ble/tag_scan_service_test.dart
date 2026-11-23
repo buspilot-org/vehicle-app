@@ -9,12 +9,16 @@ import 'beacon_test.dart' show hex;
 
 class FakeScanner implements BuspilotBleScanner {
   bool enabled = true;
+  bool location = true;
   StreamController<RawScanResult>? controller;
   BleScanFilter? lastFilter;
   int scans = 0;
 
   @override
   Future<bool> isBluetoothEnabled() async => enabled;
+
+  @override
+  Future<bool> isLocationEnabled() async => location;
 
   @override
   Stream<RawScanResult> scan({
@@ -164,5 +168,109 @@ void main() {
     expect(s.state.value.status, TagScanStatus.scanning);
     expect(scanner.scans, 1);
     await s.dispose();
+  });
+
+  group('more lifecycle', () {
+    late DateTime now;
+    TagScanService make({Duration retry = const Duration(milliseconds: 20)}) =>
+        TagScanService(
+          filter: const TagFilter.any(),
+          scanner: scanner,
+          permissions: permissions,
+          retryInterval: retry,
+          evictInterval: const Duration(hours: 1),
+          restartInterval: const Duration(minutes: 25),
+          clock: () => now,
+        );
+
+    setUp(() => now = DateTime.utc(2026, 11, 23, 8));
+
+    Future<void> wait() =>
+        Future<void>.delayed(const Duration(milliseconds: 60));
+
+    test('location off is reported and recovered from', () async {
+      final s = make();
+      scanner.location = false;
+      await s.start();
+      expect(s.state.value.status, TagScanStatus.locationOff);
+      scanner.location = true;
+      await wait();
+      expect(s.state.value.status, TagScanStatus.scanning);
+      await s.dispose();
+    });
+
+    test('watchdog notices Bluetooth switched off while scanning', () async {
+      final s = make();
+      await s.start();
+      final first = scanner.controller!;
+      scanner.enabled = false;
+      await wait();
+      expect(s.state.value.status, TagScanStatus.waitingForBluetooth);
+      expect(first.hasListener, isFalse);
+      scanner.enabled = true;
+      await wait();
+      expect(s.state.value.status, TagScanStatus.scanning);
+      await s.dispose();
+    });
+
+    test('a native location_off error maps to locationOff', () async {
+      final s = make(retry: const Duration(hours: 1));
+      await s.start();
+      scanner.controller!.addError(PlatformException(code: 'location_off'));
+      await flush();
+      expect(s.state.value.status, TagScanStatus.locationOff);
+      await s.dispose();
+    });
+
+    test('scan stream ending is an error and is retried', () async {
+      final s = make();
+      await s.start();
+      await scanner.controller!.close();
+      await flush();
+      expect(s.state.value.status, TagScanStatus.error);
+      await wait();
+      expect(s.state.value.status, TagScanStatus.scanning);
+      expect(scanner.scans, 2);
+      await s.dispose();
+    });
+
+    test('restarts the scan after restartInterval', () async {
+      final s = make();
+      await s.start();
+      await wait();
+      expect(scanner.scans, 1);
+      now = now.add(const Duration(minutes: 25));
+      await wait();
+      expect(scanner.scans, 2);
+      expect(s.state.value.status, TagScanStatus.scanning);
+      await s.dispose();
+    });
+
+    test('a second service is busy until the first stops', () async {
+      final a = make();
+      final b = make();
+      await a.start();
+      await b.start();
+      expect(b.state.value.status, TagScanStatus.busy);
+      expect(scanner.scans, 1);
+      await a.stop();
+      await wait();
+      expect(b.state.value.status, TagScanStatus.scanning);
+      await a.dispose();
+      await b.dispose();
+    });
+
+    test('start, stop, start again scans again', () async {
+      final s = make(retry: const Duration(hours: 1));
+      final first = s.start();
+      await s.stop();
+      await first;
+      await s.start();
+      expect(s.state.value.status, TagScanStatus.scanning);
+      expect(scanner.controller!.hasListener, isTrue);
+      await s.stop();
+      expect(scanner.controller!.hasListener, isFalse);
+      await s.dispose();
+    });
   });
 }

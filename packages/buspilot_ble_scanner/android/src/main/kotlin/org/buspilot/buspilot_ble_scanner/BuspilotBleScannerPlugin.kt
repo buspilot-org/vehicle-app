@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package org.buspilot.buspilot_ble_scanner
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
@@ -9,6 +10,9 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
@@ -54,6 +58,7 @@ class BuspilotBleScannerPlugin :
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "isBluetoothEnabled" -> result.success(adapter()?.isEnabled == true)
+            "isLocationEnabled" -> result.success(locationEnabled())
             else -> result.notImplemented()
         }
     }
@@ -72,6 +77,18 @@ class BuspilotBleScannerPlugin :
             events.error("bluetooth_off", "BLE scanner not available", null)
             return
         }
+        // Without neverForLocation, Android delivers scan results only with precise location
+        // granted and the system Location switch on; otherwise the scan runs but stays silent.
+        if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            events.error("permission_denied", "Precise location permission is required", null)
+            return
+        }
+        if (!locationEnabled()) {
+            events.error("location_off", "Location is switched off", null)
+            return
+        }
         val filters = try {
             buildFilters(args)
         } catch (e: IllegalArgumentException) {
@@ -88,14 +105,18 @@ class BuspilotBleScannerPlugin :
             .setReportDelay(0)
             .build()
         val cb = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult) = emit(result)
+            override fun onScanResult(callbackType: Int, result: ScanResult) = emit(this, result)
 
             override fun onBatchScanResults(results: MutableList<ScanResult>) =
-                results.forEach { emit(it) }
+                results.forEach { emit(this, it) }
 
             override fun onScanFailed(errorCode: Int) {
+                val self = this
                 mainHandler.post {
-                    sink?.error("scan_failed", "BLE scan failed with code $errorCode", errorCode)
+                    // Ignore failures of a scan that has been replaced or stopped meanwhile.
+                    if (callback === self) {
+                        sink?.error("scan_failed", "BLE scan failed with code $errorCode", errorCode)
+                    }
                 }
             }
         }
@@ -112,14 +133,14 @@ class BuspilotBleScannerPlugin :
         stopScan()
     }
 
-    private fun emit(result: ScanResult) {
+    private fun emit(from: ScanCallback, result: ScanResult) {
         val bytes = result.scanRecord?.bytes ?: return
         val event = mapOf(
             "address" to result.device.address,
             "rssi" to result.rssi,
             "bytes" to bytes,
         )
-        mainHandler.post { sink?.success(event) }
+        mainHandler.post { if (callback === from) sink?.success(event) }
     }
 
     @SuppressLint("MissingPermission") // Checked in Dart; SecurityException is caught.
@@ -148,6 +169,17 @@ class BuspilotBleScannerPlugin :
 
     private fun adapter() =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+
+    private fun locationEnabled(): Boolean {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            lm.isLocationEnabled
+        } else {
+            @Suppress("DEPRECATION")
+            lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }
+    }
 
     private fun scanMode(name: String?) = when (name) {
         "lowPower" -> ScanSettings.SCAN_MODE_LOW_POWER
