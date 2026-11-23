@@ -60,7 +60,7 @@ class TrackingTaskHandler extends TaskHandler {
       _publish();
       return;
     }
-    await _acquireQueueOwnership();
+    if (!await _acquireQueueOwnership()) return; // Stopped while waiting.
     final dir = await getApplicationSupportDirectory();
     final queue = await FilePositionQueue.open(
       File('${dir.path}/tracking/position_queue.jsonl'),
@@ -91,7 +91,8 @@ class TrackingTaskHandler extends TaskHandler {
 
   /// Waits until no other isolate owns the queue file. After 20 seconds the
   /// old owner is taken to be gone (for example killed during shutdown).
-  Future<void> _acquireQueueOwnership() async {
+  /// Returns false if this service is stopped while waiting.
+  Future<bool> _acquireQueueOwnership() async {
     final port = ReceivePort();
     _ownerPort = port;
     final deadline = DateTime.now().add(const Duration(seconds: 20));
@@ -99,12 +100,21 @@ class TrackingTaskHandler extends TaskHandler {
       port.sendPort,
       _queueOwnerName,
     )) {
+      if (_stopping || _ownerPort != port) {
+        port.close();
+        return false;
+      }
       if (DateTime.now().isAfter(deadline)) {
         IsolateNameServer.removePortNameMapping(_queueOwnerName);
       } else {
         await Future<void>.delayed(const Duration(milliseconds: 200));
       }
     }
+    if (_stopping) {
+      _releaseQueueOwnership();
+      return false;
+    }
+    return true;
   }
 
   void _releaseQueueOwnership() {
