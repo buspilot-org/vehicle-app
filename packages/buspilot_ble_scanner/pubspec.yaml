@@ -1,0 +1,24 @@
+name: buspilot_ble_scanner
+description: "Android BLE advertisement scanner for the Buspilot vehicle app. Runs a filtered scan (iBeacon, Eddystone-UID) and streams raw advertisement bytes to Dart."
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.14.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: org.buspilot.buspilot_ble_scanner
+        pluginClass: BuspilotBleScannerPlugin
