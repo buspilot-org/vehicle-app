@@ -1,4 +1,4 @@
-import 'package:buspilot_vehicle/main.dart';
+import 'package:buspilot_vehicle/src/device/device_status_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -28,7 +28,7 @@ void main() {
           };
         });
 
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MaterialApp(home: DeviceStatusScreen()));
     await tester.pump();
     final exit = find.text('Leave kiosk mode (long-press)');
     await tester.ensureVisible(exit);
@@ -54,7 +54,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('app starts on the device status screen with warnings', (
+  testWidgets('status screen shows battery values and warnings', (
     tester,
   ) async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -75,7 +75,7 @@ void main() {
           return null;
         });
 
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MaterialApp(home: DeviceStatusScreen()));
     await tester.pump();
 
     expect(find.text('Device status'), findsOneWidget);
