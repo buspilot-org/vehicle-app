@@ -44,7 +44,6 @@ android {
     defaultConfig {
         minSdk = 24
     }
-
 }
 
 kotlin {

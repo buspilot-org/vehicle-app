@@ -55,8 +55,9 @@ class TagScanState {
 /// alive with that foreground service.
 ///
 /// Only one instance can scan at a time (the native scanner has a single
-/// channel per engine); a second one reports [TagScanStatus.busy]. Share one
-/// instance, e.g. pass it to the debug screen.
+/// channel per engine): the first started instance holds the scanner until
+/// [stop]; others report [TagScanStatus.busy] and retry. Share one instance,
+/// e.g. pass it to the debug screen.
 ///
 /// Once started, it keeps trying: if Bluetooth or Location is switched off, a
 /// permission is missing or the scan fails, it retries every [retryInterval]
@@ -128,6 +129,7 @@ class TagScanService {
     _watchdog?.cancel();
     _evictTimer = _watchdog = null;
     await _disconnect();
+    if (_owner == this) _owner = null;
     tracker.clear();
     _state.value = const TagScanState(TagScanStatus.stopped);
   }
@@ -139,6 +141,15 @@ class TagScanService {
   }
 
   Future<void> _check() async {
+    try {
+      await _checkOnce();
+    } catch (e) {
+      // Runs from a timer: never let an error escape.
+      _setState(TagScanStatus.error, '$e');
+    }
+  }
+
+  Future<void> _checkOnce() async {
     if (!_wanted || _busy) return;
     if (_sub == null) return _connect();
     // Android stops delivering results without an error when the adapter or
@@ -177,17 +188,19 @@ class TagScanService {
           'No tag UUIDs or namespaces configured',
         );
       }
-      final owner = _owner;
-      if (owner != null && owner != this && owner._sub != null) {
+      // Claim the scanner before any await, so two instances cannot both pass
+      // this check. The claim is kept across retries and restarts and only
+      // released by stop().
+      if (_owner != null && _owner != this) {
         return _setState(TagScanStatus.busy, 'Another scan is running');
       }
+      _owner = this;
       if (await permissions.check() != BlePermissionStatus.granted) {
         return _setState(TagScanStatus.noPermission);
       }
       final problem = await _environmentProblem();
       if (problem != null) return _setState(problem);
       if (!_wanted) return; // Stopped while awaiting.
-      _owner = this;
       _scanStarted = _clock();
       _sub = _scanner
           .scan(filter: scanFilter, mode: scanMode)
@@ -206,7 +219,6 @@ class TagScanService {
     final sub = _sub;
     _sub = null;
     _scanStarted = null;
-    if (_owner == this) _owner = null;
     await sub?.cancel();
   }
 
@@ -239,14 +251,14 @@ class TagScanService {
   void _onDone() {
     _sub = null;
     _scanStarted = null;
-    if (_owner == this) _owner = null;
     _setState(TagScanStatus.error, 'Scan ended unexpectedly');
   }
 
   static Future<bool> _call(Future<bool> Function() f) async {
     try {
       return await f();
-    } on PlatformException {
+    } on Exception {
+      // PlatformException, MissingPluginException: treat as unavailable.
       return false;
     }
   }

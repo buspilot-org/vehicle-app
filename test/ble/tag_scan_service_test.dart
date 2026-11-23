@@ -185,8 +185,9 @@ void main() {
 
     setUp(() => now = DateTime.utc(2026, 11, 23, 8));
 
+    // Retry interval is 20 ms; wait 10x that to stay robust on slow runners.
     Future<void> wait() =>
-        Future<void>.delayed(const Duration(milliseconds: 60));
+        Future<void>.delayed(const Duration(milliseconds: 200));
 
     test('location off is reported and recovered from', () async {
       final s = make();
@@ -239,9 +240,12 @@ void main() {
       await s.start();
       await wait();
       expect(scanner.scans, 1);
+      final old = scanner.controller!;
       now = now.add(const Duration(minutes: 25));
       await wait();
       expect(scanner.scans, 2);
+      expect(old.hasListener, isFalse);
+      expect(scanner.controller!.hasListener, isTrue);
       expect(s.state.value.status, TagScanStatus.scanning);
       await s.dispose();
     });
@@ -256,6 +260,36 @@ void main() {
       await a.stop();
       await wait();
       expect(b.state.value.status, TagScanStatus.scanning);
+      await a.dispose();
+      await b.dispose();
+    });
+
+    test('two services started at once: one scans, one is busy', () async {
+      final a = make(retry: const Duration(hours: 1));
+      final b = make(retry: const Duration(hours: 1));
+      await Future.wait([a.start(), b.start()]);
+      expect(scanner.scans, 1);
+      expect(
+        {a.state.value.status, b.state.value.status},
+        {TagScanStatus.scanning, TagScanStatus.busy},
+      );
+      await a.dispose();
+      await b.dispose();
+    });
+
+    test('owner keeps the scanner across errors and restarts', () async {
+      final a = make();
+      final b = make();
+      await a.start();
+      await b.start();
+      await scanner.controller!.close(); // a's scan ends.
+      await wait();
+      expect(a.state.value.status, TagScanStatus.scanning);
+      expect(b.state.value.status, TagScanStatus.busy);
+      now = now.add(const Duration(minutes: 25));
+      await wait();
+      expect(a.state.value.status, TagScanStatus.scanning);
+      expect(b.state.value.status, TagScanStatus.busy);
       await a.dispose();
       await b.dispose();
     });
