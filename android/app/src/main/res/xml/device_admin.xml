@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No policies are requested: device owner status alone is what the app
+     needs (lock task allow-list, background activity start after boot). -->
+<device-admin>
+    <uses-policies />
+</device-admin>

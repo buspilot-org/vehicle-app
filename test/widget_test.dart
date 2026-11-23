@@ -1,30 +1,47 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:buspilot_vehicle/main.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'package:buspilot_vehicle/main.dart';
-
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  const channel = MethodChannel('org.buspilot.vehicle/device');
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  testWidgets('app starts on the device status screen with warnings', (
+    tester,
+  ) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          switch (call.method) {
+            case 'getBattery':
+              return {
+                'available': true,
+                'level': 72,
+                'status': 'charging',
+                'plugged': 'usb',
+                'health': 'good',
+                'temperatureC': 48.5,
+              };
+            case 'getDeviceState':
+              return {'deviceOwner': true, 'lockTaskState': 'locked'};
+          }
+          return null;
+        });
+
     await tester.pumpWidget(const MyApp());
-
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Device status'), findsOneWidget);
+    expect(find.textContaining('Battery is 48.5 °C'), findsOneWidget);
+    expect(find.text('72 %'), findsOneWidget);
+    expect(find.text('locked (device owner)'), findsOneWidget);
+    expect(find.text('Leave kiosk mode (long-press)'), findsOneWidget);
+
+    // Dispose the screen so its poll timer is cancelled.
+    await tester.pumpWidget(const SizedBox());
   });
 }
