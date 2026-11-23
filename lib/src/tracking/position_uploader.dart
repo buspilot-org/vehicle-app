@@ -128,7 +128,15 @@ class PositionUploader {
         if (batch.isEmpty || _stopped) break;
         for (final position in batch) {
           if (_stopped) break;
-          await sender.send(position);
+          try {
+            await sender.send(position);
+          } on InvalidOsmAndAttribute catch (e) {
+            // Can only come from a damaged queue file (enqueue checks
+            // attributes). Drop the record so it does not block the queue.
+            uncommitted.add(position);
+            error = 'Dropped an unsendable position ($e)';
+            continue;
+          }
           sent++;
           uncommitted.add(position);
           lastSent = position;
@@ -137,23 +145,23 @@ class PositionUploader {
         await queue.removeSent(uncommitted);
         uncommitted.clear();
       }
-      lastError = null;
     } on SendException catch (e) {
       error = e.message;
-    } catch (e) {
+    } on Exception catch (e) {
       // For example a full disk while rewriting the queue file. Keep
       // everything queued and report it; the next flush tries again.
+      // Errors (bugs) are not caught.
       error = 'Unexpected error: $e';
     } finally {
       if (uncommitted.isNotEmpty) {
         try {
           await queue.removeSent(uncommitted);
-        } catch (e) {
+        } on Exception catch (e) {
           error ??= 'Unexpected error: $e';
         }
       }
     }
-    if (error != null) lastError = error;
+    lastError = error;
     return FlushResult(sent: sent, error: error);
   }
 }

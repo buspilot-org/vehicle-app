@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:buspilot_vehicle/src/tracking/osmand_request.dart';
@@ -209,7 +210,9 @@ void main() {
   });
 
   test('reports unexpected errors and keeps the queue', () async {
-    final broken = MockClient((request) async => throw StateError('boom'));
+    final broken = MockClient(
+      (request) async => throw const FileSystemException('boom'),
+    );
     final u = PositionUploader(
       queue: queue,
       sender: OsmAndSender(
@@ -223,5 +226,20 @@ void main() {
     expect(result.error, contains('boom'));
     expect(u.lastError, contains('boom'));
     expect(queue.length, 1);
+  });
+
+  test('drops an unsendable record from a damaged queue file', () async {
+    final file = File('${dir.path}/damaged.jsonl');
+    final good = rec(1).toJson();
+    await file.writeAsString(
+      '{"t":0,"lat":1,"lon":2,"attr":{"lat":"x"}}\n${jsonEncode(good)}\n',
+    );
+    queue = await FilePositionQueue.open(file);
+    final u = uploader();
+    final result = await u.flush();
+    expect(result.sent, 1);
+    expect(result.error, contains('unsendable'));
+    expect(queue.isEmpty, isTrue);
+    expect(sentTimestamps(), [ts(1)]);
   });
 }

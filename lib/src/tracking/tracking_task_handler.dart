@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:ui';
 
 import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -22,6 +24,12 @@ void trackingTaskCallback() {
   FlutterForegroundTask.setTaskHandler(TrackingTaskHandler());
 }
 
+/// Process-wide name that the isolate owning the queue file registers.
+/// After a restart, the old service isolate can still be shutting down while
+/// the new one starts (both run in the same process, so a file lock would
+/// not tell them apart).
+const _queueOwnerName = 'org.buspilot.tracking.queueOwner';
+
 /// Message the UI sends to ask the service for a fresh [TrackingStatus].
 const statusRequestMessage = 'trackingStatusRequest';
 
@@ -41,6 +49,7 @@ class TrackingTaskHandler extends TaskHandler {
   String? _queueError;
   String _deviceId = '';
   bool _stopping = false;
+  ReceivePort? _ownerPort;
   String _notificationText = '';
 
   @override
@@ -51,6 +60,7 @@ class TrackingTaskHandler extends TaskHandler {
       _publish();
       return;
     }
+    await _acquireQueueOwnership();
     final dir = await getApplicationSupportDirectory();
     final queue = await FilePositionQueue.open(
       File('${dir.path}/tracking/position_queue.jsonl'),
@@ -77,6 +87,35 @@ class TrackingTaskHandler extends TaskHandler {
     // an error) only starts once onStart returns, and a long backlog can take
     // a while to send.
     unawaited(_flush());
+  }
+
+  /// Waits until no other isolate owns the queue file. After 20 seconds the
+  /// old owner is taken to be gone (for example killed during shutdown).
+  Future<void> _acquireQueueOwnership() async {
+    final port = ReceivePort();
+    _ownerPort = port;
+    final deadline = DateTime.now().add(const Duration(seconds: 20));
+    while (!IsolateNameServer.registerPortWithName(
+      port.sendPort,
+      _queueOwnerName,
+    )) {
+      if (DateTime.now().isAfter(deadline)) {
+        IsolateNameServer.removePortNameMapping(_queueOwnerName);
+      } else {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+    }
+  }
+
+  void _releaseQueueOwnership() {
+    final port = _ownerPort;
+    if (port == null) return;
+    final owner = IsolateNameServer.lookupPortByName(_queueOwnerName);
+    if (owner == port.sendPort) {
+      IsolateNameServer.removePortNameMapping(_queueOwnerName);
+    }
+    port.close();
+    _ownerPort = null;
   }
 
   void _listenToPositions() {
@@ -199,17 +238,18 @@ class TrackingTaskHandler extends TaskHandler {
     _stopping = true;
     await _positions?.cancel();
     _positions = null;
-    // Let a running send and queue write finish, so a restarted service does
-    // not open the queue file while this isolate still writes it.
-    final uploader = _uploader;
-    final queue = _queue;
-    uploader?.stop();
-    try {
-      await Future.wait([?uploader?.idle, ?queue?.idle])
-          .timeout(const Duration(seconds: 5));
-    } catch (_) {
-      // Timed out or failed: nothing more to do while shutting down.
-    }
+    // Abort a running send, let the queue write that follows finish, then
+    // hand the queue file over to a restarted service.
+    _uploader?.stop();
     _client?.close();
+    try {
+      await _uploader?.idle.timeout(const Duration(seconds: 5));
+      // Read the queue lock only now, so it includes writes the flush made
+      // while finishing.
+      await _queue?.idle.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      // Give up waiting; ownership is released below either way.
+    }
+    _releaseQueueOwnership();
   }
 }

@@ -115,8 +115,11 @@ class TrackingController extends ChangeNotifier {
     await store.save(newConfig);
     config = newConfig;
     notifyListeners();
-    // Restart as one guarded step, so a start/stop tap in between cannot
-    // interleave with it.
+    // Wait for a start/stop in progress, then restart as one guarded step so
+    // the new settings always take effect.
+    while (_busy) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
     await _guard(() async {
       if (!await FlutterForegroundTask.isRunningService) return;
       await FlutterForegroundTask.stopService();
