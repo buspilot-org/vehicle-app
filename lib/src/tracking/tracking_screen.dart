@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../ble/ble_debug_screen.dart';
 import '../config/settings_screen.dart';
 import 'permission_screen.dart';
 import 'tracking_controller.dart';
@@ -91,6 +93,15 @@ class _TrackingScreenState extends State<TrackingScreen>
       appBar: AppBar(
         title: const Text('Buspilot'),
         actions: [
+          // Not in release builds: the debug screen shows MAC addresses.
+          if (!kReleaseMode)
+            IconButton(
+              tooltip: 'BLE tags (debug)',
+              icon: const Icon(Icons.bluetooth_searching),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const BleDebugScreen()),
+              ),
+            ),
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.settings),
