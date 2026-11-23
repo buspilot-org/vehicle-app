@@ -1,0 +1,184 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:battery_plus/battery_plus.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+
+import '../config/config_store.dart';
+import 'position_filter.dart';
+import 'position_queue.dart';
+import 'position_record.dart';
+import 'position_uploader.dart';
+import 'tracking_status.dart';
+
+/// Entry point of the foreground service isolate. Also runs after a reboot
+/// or app update (autoRunOnBoot), without the UI.
+@pragma('vm:entry-point')
+void trackingTaskCallback() {
+  FlutterForegroundTask.setTaskHandler(TrackingTaskHandler());
+}
+
+/// Message the UI sends to ask the service for a fresh [TrackingStatus].
+const statusRequestMessage = 'trackingStatusRequest';
+
+/// Runs inside the foreground service: receives location fixes, queues them
+/// and sends them to Traccar.
+class TrackingTaskHandler extends TaskHandler {
+  final _battery = Battery();
+  http.Client? _client;
+  FilePositionQueue? _queue;
+  PositionUploader? _uploader;
+  PositionFilter? _filter;
+  StreamSubscription<Position>? _positions;
+  Duration _interval = const Duration(seconds: 10);
+  DateTime? _lastFixAt;
+  String? _locationError;
+  String? _configError;
+  String _notificationText = '';
+
+  @override
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    final config = await ConfigStore().load();
+    if (!config.isValid(allowHttp: !kReleaseMode)) {
+      _configError = 'Settings are incomplete. Open the app to fix them.';
+      _publish();
+      return;
+    }
+    final dir = await getApplicationSupportDirectory();
+    final queue = await FilePositionQueue.open(
+      File('${dir.path}/tracking/position_queue.jsonl'),
+    );
+    final client = http.Client();
+    _client = client;
+    _queue = queue;
+    _uploader = PositionUploader(
+      queue: queue,
+      sender: OsmAndSender(
+        client: client,
+        server: config.serverUri,
+        deviceId: config.deviceId,
+      ),
+    );
+    _interval = Duration(seconds: config.intervalSeconds);
+    _filter = PositionFilter(
+      interval: _interval,
+      distanceFilterMeters: config.distanceFilterMeters,
+    );
+    _listenToPositions();
+    await _flush();
+  }
+
+  void _listenToPositions() {
+    _positions?.cancel();
+    _positions =
+        Geolocator.getPositionStream(
+          locationSettings: AndroidSettings(
+            accuracy: LocationAccuracy.high,
+            intervalDuration: _interval,
+            // Distance filtering is done by PositionFilter, so that a parked bus
+            // still reports now and then.
+            distanceFilter: 0,
+          ),
+        ).listen(
+          _onPosition,
+          onError: (Object error) {
+            _locationError = error is LocationServiceDisabledException
+                ? 'Location is switched off on the phone.'
+                : error is PermissionDeniedException
+                ? 'Location permission missing. Open the app.'
+                : 'Location error: $error';
+            _positions?.cancel();
+            _positions = null; // Retried by onRepeatEvent.
+            _publish();
+          },
+          cancelOnError: true,
+        );
+  }
+
+  Future<void> _onPosition(Position p) async {
+    _lastFixAt = DateTime.now();
+    _locationError = null;
+    final record = PositionRecord(
+      timestamp: p.timestamp,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      speed: p.speed >= 0 ? p.speed : null,
+      bearing: p.heading >= 0 ? p.heading : null,
+      altitude: p.altitude,
+      accuracy: p.accuracy > 0 ? p.accuracy : null,
+      battery: await _batteryLevel(),
+    );
+    if (_filter?.accept(record) != true) return;
+    await _uploader?.enqueue(record);
+    await _flush();
+  }
+
+  Future<int?> _batteryLevel() async {
+    try {
+      final level = await _battery.batteryLevel;
+      return level >= 0 && level <= 100 ? level : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  void onRepeatEvent(DateTime timestamp) {
+    if (_uploader == null) return;
+    if (_positions == null) _listenToPositions();
+    unawaited(_flush());
+  }
+
+  @override
+  void onReceiveData(Object data) {
+    if (data == statusRequestMessage) _publish();
+  }
+
+  Future<void> _flush() async {
+    final uploader = _uploader;
+    if (uploader == null) return;
+    _publish(); // Show the new queue length right away.
+    await uploader.flush();
+    _publish();
+  }
+
+  void _publish() {
+    final uploader = _uploader;
+    final queue = _queue;
+    final status = TrackingStatus(
+      lastSent: uploader?.lastSent,
+      lastSentAt: uploader?.lastSentAt,
+      lastFixAt: _lastFixAt,
+      queueLength: queue?.length ?? 0,
+      droppedCount: queue?.droppedCount ?? 0,
+      error: _configError ?? _locationError ?? uploader?.lastError,
+    );
+    FlutterForegroundTask.sendDataToMain(status.toMessage());
+    _updateNotification(status);
+  }
+
+  void _updateNotification(TrackingStatus status) {
+    // No coordinates here: the notification is visible on the lock screen.
+    final text = status.error != null
+        ? status.queueLength > 0
+              ? '${status.error} · ${status.queueLength} positions waiting'
+              : status.error!
+        : status.queueLength > 1
+        ? 'Sending positions · ${status.queueLength} waiting'
+        : 'Sending positions';
+    if (text == _notificationText) return;
+    _notificationText = text;
+    FlutterForegroundTask.updateService(notificationText: text);
+  }
+
+  @override
+  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
+    await _positions?.cancel();
+    _positions = null;
+    _client?.close();
+  }
+}
