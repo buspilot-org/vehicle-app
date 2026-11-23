@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android 11 and older: legacy Bluetooth permissions plus location for scanning. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <!-- Android 12+: BLUETOOTH_SCAN. Deliberately WITHOUT usesPermissionFlags="neverForLocation",
+         because that flag makes Android drop beacon advertisements from scan results. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!-- Needed for BLE scan results on Android 11 and older; the tracking module needs it anyway. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+</manifest>
