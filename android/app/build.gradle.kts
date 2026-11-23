@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "org.buspilot.buspilot_vehicle"
-    compileSdk = flutter.compileSdkVersion
+    // 37 instead of flutter.compileSdkVersion (36): permission_handler_android 14.x needs it.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
