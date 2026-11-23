@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../ble/ble_debug_screen.dart';
 import '../config/settings_screen.dart';
+import '../device/device_status_screen.dart';
 import 'permission_screen.dart';
 import 'tracking_controller.dart';
 import 'tracking_permissions.dart';
@@ -102,6 +103,15 @@ class _TrackingScreenState extends State<TrackingScreen>
                 MaterialPageRoute<void>(builder: (_) => const BleDebugScreen()),
               ),
             ),
+          IconButton(
+            tooltip: 'Device status',
+            icon: const Icon(Icons.battery_std),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const DeviceStatusScreen(),
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.settings),
