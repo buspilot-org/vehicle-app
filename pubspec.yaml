@@ -69,6 +69,21 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # The font licence. The brand files are not covered by the AGPL; see README.
+  assets:
+    - assets/fonts/OFL.txt
+
+  # Brand font, bundled so that no font requests go to a third party.
+  fonts:
+    - family: M PLUS Rounded 1c
+      fonts:
+        - asset: assets/fonts/MPLUSRounded1c-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/MPLUSRounded1c-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/MPLUSRounded1c-ExtraBold.ttf
+          weight: 800
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

@@ -10,6 +10,7 @@ import 'permission_screen.dart';
 import 'tracking_controller.dart';
 import 'tracking_permissions.dart';
 import 'companion_status.dart';
+import '../ui/theme.dart';
 
 /// Main screen: tracking on/off, the background service (tags, health,
 /// events) and the Traccar Client SDK's log (the SDK reports no positions to
@@ -209,7 +210,7 @@ class _StateCard extends StatelessWidget {
               children: [
                 Icon(
                   c.running ? Icons.gps_fixed : Icons.gps_off,
-                  color: c.running ? Colors.green : theme.disabledColor,
+                  color: c.running ? context.brand.onTime : theme.disabledColor,
                   size: 32,
                 ),
                 const SizedBox(width: 12),
@@ -291,7 +292,7 @@ class _CompanionCard extends StatelessWidget {
           ListTile(
             leading: Icon(
               running ? Icons.sync : Icons.sync_disabled,
-              color: running ? Colors.green : theme.disabledColor,
+              color: running ? context.brand.onTime : theme.disabledColor,
             ),
             title: const Text('Tags and device health'),
             subtitle: Text(
