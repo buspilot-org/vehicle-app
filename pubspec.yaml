@@ -69,7 +69,7 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # The font licence. The brand files are not covered by the AGPL; see README.
+  # The font licence (SIL OFL 1.1).
   assets:
     - assets/fonts/OFL.txt
 
