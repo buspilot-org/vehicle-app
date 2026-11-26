@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'tracking_permissions.dart';
+import '../ui/theme.dart';
 
 /// Walks through the Android permissions tracking needs, one step at a time.
 /// Shown on first start and whenever a required permission is missing.
@@ -190,7 +191,7 @@ class _Step extends StatelessWidget {
     return Card(
       child: ListTile(
         leading: done
-            ? const Icon(Icons.check_circle, color: Colors.green)
+            ? Icon(Icons.check_circle, color: context.brand.onTime)
             : CircleAvatar(radius: 14, child: Text('$number')),
         title: Text(title),
         subtitle: Text(text),

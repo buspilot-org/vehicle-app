@@ -10,6 +10,7 @@ import 'permission_screen.dart';
 import 'tracking_controller.dart';
 import 'tracking_permissions.dart';
 import 'companion_status.dart';
+import '../ui/theme.dart';
 
 /// Main screen: tracking on/off, the background service (tags, health,
 /// events) and the Traccar Client SDK's log (the SDK reports no positions to
@@ -139,6 +140,11 @@ class _TrackingScreenState extends State<TrackingScreen>
             tooltip: 'Settings',
             icon: const Icon(Icons.settings),
             onPressed: _openSettings,
+          ),          // Licences of the app, its packages and the bundled font.
+          IconButton(
+            tooltip: 'Licences',
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => showLicensePage(context: context, applicationName: 'Buspilot'),
           ),
         ],
       ),
@@ -151,10 +157,15 @@ class _TrackingScreenState extends State<TrackingScreen>
               Card(
                 color: Theme.of(context).colorScheme.errorContainer,
                 child: ListTile(
+                  // Text, icon and button in onErrorContainer: the brand
+                  // primary is under 4.5:1 on errorContainer.
+                  textColor: Theme.of(context).colorScheme.onErrorContainer,
+                  iconColor: Theme.of(context).colorScheme.onErrorContainer,
                   leading: const Icon(Icons.warning),
                   title: const Text('Permissions missing'),
                   subtitle: const Text('Tracking cannot run without them.'),
                   trailing: TextButton(
+                    style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.onErrorContainer),
                     onPressed: _openPermissions,
                     child: const Text('Fix'),
                   ),
@@ -209,7 +220,7 @@ class _StateCard extends StatelessWidget {
               children: [
                 Icon(
                   c.running ? Icons.gps_fixed : Icons.gps_off,
-                  color: c.running ? Colors.green : theme.disabledColor,
+                  color: c.running ? context.brand.onTime : theme.disabledColor,
                   size: 32,
                 ),
                 const SizedBox(width: 12),
@@ -291,7 +302,7 @@ class _CompanionCard extends StatelessWidget {
           ListTile(
             leading: Icon(
               running ? Icons.sync : Icons.sync_disabled,
-              color: running ? Colors.green : theme.disabledColor,
+              color: running ? context.brand.onTime : theme.disabledColor,
             ),
             title: const Text('Tags and device health'),
             subtitle: Text(

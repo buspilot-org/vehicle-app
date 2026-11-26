@@ -1,10 +1,17 @@
+import 'package:flutter/foundation.dart' show LicenseEntryWithLineBreaks, LicenseRegistry;
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:material_ui/material_ui.dart';
 
 import 'src/tracking/tracking_controller.dart';
 import 'src/tracking/tracking_screen.dart';
+import 'src/ui/theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // The bundled brand font's licence, shown on the licence screen.
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(['M PLUS Rounded 1c'], await rootBundle.loadString('assets/fonts/OFL.txt'));
+  });
   initTrackingCommunication();
   runApp(BuspilotVehicleApp(trackingController: TrackingController()));
 }
@@ -18,7 +25,9 @@ class BuspilotVehicleApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Buspilot',
-      theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.indigo)),
+      // Light only, as before: every bus phone looks the same, whatever its
+      // system setting.
+      theme: buildTheme(Brightness.light),
       home: TrackingScreen(controller: trackingController),
     );
   }
