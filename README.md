@@ -58,4 +58,4 @@ Every pull request gets at least one thorough self-review before merge. The orga
 
 [GNU Affero General Public License v3.0](LICENSE)
 
-The Buspilot name, logo, launcher icons and brand colours (`lib/src/ui/brand/`, the launcher icons under `android/app/src/main/res/mipmap-*`) come from the private `buspilot-org/brand` repository and are not covered by this licence. All rights reserved; forks must replace them. The M PLUS Rounded 1c font in `assets/fonts/` is licensed under the [SIL Open Font License 1.1](assets/fonts/OFL.txt).
+The Buspilot name, logo, launcher icons and brand colours (`lib/src/ui/brand/`, the launcher icons under `android/app/src/main/res/mipmap-*`) come from the private `buspilot-org/brand` repository and are not covered by this licence. All rights reserved; forks must replace them. The M PLUS Rounded 1c font in `assets/fonts/` is licensed under the [SIL Open Font License 1.1](assets/fonts/OFL.txt). It is a subset of the brand repository's font (Latin, punctuation and kana, made with fontTools `pyftsubset`) to keep the APK small; add kanji ranges if the UI gets Japanese text. The licences are shown from the info button in the app bar.

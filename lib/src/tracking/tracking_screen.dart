@@ -140,6 +140,11 @@ class _TrackingScreenState extends State<TrackingScreen>
             tooltip: 'Settings',
             icon: const Icon(Icons.settings),
             onPressed: _openSettings,
+          ),          // Licences of the app, its packages and the bundled font.
+          IconButton(
+            tooltip: 'Licences',
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => showLicensePage(context: context, applicationName: 'Buspilot'),
           ),
         ],
       ),
@@ -152,10 +157,15 @@ class _TrackingScreenState extends State<TrackingScreen>
               Card(
                 color: Theme.of(context).colorScheme.errorContainer,
                 child: ListTile(
+                  // Text, icon and button in onErrorContainer: the brand
+                  // primary is under 4.5:1 on errorContainer.
+                  textColor: Theme.of(context).colorScheme.onErrorContainer,
+                  iconColor: Theme.of(context).colorScheme.onErrorContainer,
                   leading: const Icon(Icons.warning),
                   title: const Text('Permissions missing'),
                   subtitle: const Text('Tracking cannot run without them.'),
                   trailing: TextButton(
+                    style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.onErrorContainer),
                     onPressed: _openPermissions,
                     child: const Text('Fix'),
                   ),

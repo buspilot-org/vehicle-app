@@ -60,5 +60,9 @@ TextTheme _brandText(TextTheme t) {
 
 /// The brand colours of the current theme.
 extension BuspilotTheme on BuildContext {
-  BuspilotColors get brand => Theme.of(this).extension<BuspilotColors>() ?? BuspilotColors.light;
+  BuspilotColors get brand {
+    final colors = Theme.of(this).extension<BuspilotColors>();
+    assert(colors != null, 'Theme built without buildTheme(): no BuspilotColors');
+    return colors ?? BuspilotColors.light;
+  }
 }

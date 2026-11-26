@@ -25,8 +25,9 @@ class BuspilotVehicleApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Buspilot',
+      // Light only, as before: every bus phone looks the same, whatever its
+      // system setting.
       theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
       home: TrackingScreen(controller: trackingController),
     );
   }

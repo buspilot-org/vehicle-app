@@ -73,7 +73,9 @@ flutter:
   assets:
     - assets/fonts/OFL.txt
 
-  # Brand font, bundled so that no font requests go to a third party.
+  # Brand font, bundled so that no font requests go to a third party. Subset
+  # to Latin, punctuation and kana (no kanji) to keep the APK small: the UI is
+  # English. Kanji would fall back to the system font. See README.
   fonts:
     - family: M PLUS Rounded 1c
       fonts:

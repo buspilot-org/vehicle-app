@@ -13,4 +13,24 @@ void main() {
       expect(t.textTheme.bodyLarge?.fontFamily, brandFontFamily);
     }
   });
+
+  test('colour pairs from the theme meet WCAG AA', () {
+    double contrast(Color a, Color b) {
+      final la = a.computeLuminance(), lb = b.computeLuminance();
+      return (la > lb ? la + 0.05 : lb + 0.05) / (la > lb ? lb + 0.05 : la + 0.05);
+    }
+
+    for (final b in Brightness.values) {
+      final s = buildTheme(b).colorScheme;
+      final bp = buildTheme(b).extension<BuspilotColors>()!;
+      expect(contrast(s.primary, s.onPrimary), greaterThanOrEqualTo(4.5));
+      expect(contrast(s.secondary, s.onSecondary), greaterThanOrEqualTo(4.5));
+      expect(contrast(s.tertiary, s.onTertiary), greaterThanOrEqualTo(4.5));
+      expect(contrast(s.primaryContainer, s.onPrimaryContainer), greaterThanOrEqualTo(4.5));
+      expect(contrast(s.surface, s.onSurfaceVariant), greaterThanOrEqualTo(4.5));
+      expect(contrast(s.errorContainer, s.onErrorContainer), greaterThanOrEqualTo(4.5));
+      // Status icons on cards.
+      expect(contrast(s.surface, bp.onTime), greaterThanOrEqualTo(3));
+    }
+  });
 }
